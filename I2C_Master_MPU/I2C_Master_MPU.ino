@@ -6,17 +6,14 @@ union int_bytes {
   } yp;
 } int_bytes;
 
+#define MPU6050_ACCEL_OFFSET_X -1660
+#define MPU6050_ACCEL_OFFSET_Y -414
+#define MPU6050_ACCEL_OFFSET_Z 1663
+#define MPU6050_GYRO_OFFSET_X  109
+#define MPU6050_GYRO_OFFSET_Y  124
+#define MPU6050_GYRO_OFFSET_Z  86
+
 #define DEBUG_OUT
-
-//#define SERVO_OUT
-#ifdef SERVO_OUT
-#define YAW_SERVO_PIN 10
-#define PITCH_SERVO_PIN 11
-
-#include <Servo.h>
-Servo yaw_servo;
-Servo pitch_servo;
-#endif
 
 // Calibration variables
 #define CALIBRATION_PIN 14
@@ -104,11 +101,6 @@ void setup() {
   // configure LED for output
   pinMode(LED_PIN, OUTPUT);
 
-#ifdef SERVO_OUT
-  yaw_servo.attach(YAW_SERVO_PIN);
-  pitch_servo.attach(PITCH_SERVO_PIN);
-#endif
-
   Serial.begin(9600);
 
   // join I2C bus (I2Cdev library doesn't do this automatically)
@@ -131,12 +123,12 @@ void setup() {
   Serial.println(F("Initializing DMP..."));
   devStatus = mpu.dmpInitialize();
 
-  // supply your own gyro offsets here, scaled for min sensitivity
-  mpu.setXGyroOffset(220);
-  mpu.setYGyroOffset(76);
-  mpu.setZGyroOffset(-85);
-  mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
-
+    mpu.setXAccelOffset(MPU6050_ACCEL_OFFSET_X);
+    mpu.setYAccelOffset(MPU6050_ACCEL_OFFSET_Y);
+    mpu.setZAccelOffset(MPU6050_ACCEL_OFFSET_Z);
+    mpu.setXGyroOffset(MPU6050_GYRO_OFFSET_X);
+    mpu.setYGyroOffset(MPU6050_GYRO_OFFSET_Y);
+    mpu.setZGyroOffset(MPU6050_GYRO_OFFSET_Z);
   // make sure it worked (returns 0 if so)
   if (devStatus == 0) {
     // turn on the DMP, now that it's ready
@@ -222,7 +214,6 @@ void loop() {
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-    // TODO: use interrupt
     if (digitalRead(CALIBRATION_PIN) == LOW) {
       yaw_offset = ypr[0];
       pitch_offset = ypr[1];
@@ -239,16 +230,12 @@ void loop() {
     // Angle in degree is ratio of reading to max reading * 180 where max reading: 2 * M_PI
     int pitch_value = (int) (90 + ypr[1] * 180 / M_PI - pitch_offset);
 
-#ifdef SERVO_OUT
-    yaw_servo.write(yaw_value);
-    pitch_servo.write(pitch_value);
-#endif
-
     // Send the yaw/pitch/roll euler angles (in degrees) over serial connection
     // calculated from the quaternions in the FIFO.
     // Note this also requires gravity vector calculations.
     // Also note that yaw/pitch/roll angles suffer from gimbal lock
     // (for more info, see: http://en.wikipedia.org/wiki/Gimbal_lock)
+
 #ifdef DEBUG_OUT
     Serial.print("ypr\t");
     Serial.print(yaw_value);
@@ -263,8 +250,9 @@ void loop() {
     for (int i = 0; i < 4; i++) {
       Wire.write(int_bytes.b[i]);
     }
+
     Wire.endTransmission(12);
-    // blink LED to indicate activity
+
     blinkState = !blinkState;
     digitalWrite(LED_PIN, blinkState);
   }
